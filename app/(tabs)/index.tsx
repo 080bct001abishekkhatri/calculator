@@ -7,19 +7,64 @@ import { saveToHistory } from '../../utils/history';
 import { computeExpression, computeStats, getLastAnswer, setAngleMode, setLastAnswer } from '../../utils/mathEngine';
 
 const ALL_MODES = [
-  { id: 'COMP', num: '1', name: 'COMP', desc: 'General Computations (Default)' },
-  { id: 'CMPLX', num: '2', name: 'CMPLX', desc: 'Complex Number Arithmetic' },
-  { id: 'STAT', num: '3', name: 'STAT', desc: 'Statistics & Regression' },
-  { id: 'BASE-N', num: '4', name: 'BASE-N', desc: 'Binary / Octal / Hex Converter' },
-  { id: 'EQN', num: '5', name: 'EQN', desc: 'Equation Solver (Quadratic/Cubic)' },
-  { id: 'MATRIX', num: '6', name: 'MATRIX', desc: 'Matrix Operations' },
-  { id: 'TABLE', num: '7', name: 'TABLE', desc: 'Create Function Tables' },
-  { id: 'VECTOR', num: '8', name: 'VECTOR', desc: 'Vector Calculations' },
-  { id: 'INEQ', num: '9', name: 'INEQ', desc: 'Inequality Solver' },
-  { id: 'VERIF', num: '10', name: 'VERIF', desc: 'Verification / Proof' },
-  { id: 'DIST', num: '11', name: 'DIST', desc: 'Statistical Distribution' },
-  { id: 'ECON', num: '★', name: 'ECON', desc: 'Cash Flow Analyzer — Original Feature' },
+  { id: 'COMP',   num: '1',  name: 'COMP',   desc: 'General Computations (Default)' },
+  { id: 'CMPLX',  num: '2',  name: 'CMPLX',  desc: 'Complex Number Arithmetic' },
+  { id: 'STAT',   num: '3',  name: 'STAT',   desc: 'Statistics & Regression' },
+  { id: 'BASE-N', num: '4',  name: 'BASE-N', desc: 'Binary / Octal / Hex Converter' },
+  { id: 'EQN',    num: '5',  name: 'EQN',    desc: 'Equation Solver (Quadratic/Cubic)' },
+  { id: 'MATRIX', num: '6',  name: 'MATRIX', desc: 'Matrix Operations' },
+  { id: 'TABLE',  num: '7',  name: 'TABLE',  desc: 'Create Function Tables' },
+  { id: 'VECTOR', num: '8',  name: 'VECTOR', desc: 'Vector Calculations' },
+  { id: 'INEQ',   num: '9',  name: 'INEQ',   desc: 'Inequality Solver' },
+  { id: 'VERIF',  num: '10', name: 'VERIF',  desc: 'Verification / Proof' },
+  { id: 'DIST',   num: '11', name: 'DIST',   desc: 'Statistical Distribution' },
+  { id: 'ECON',   num: '★',  name: 'ECON',   desc: 'Cash Flow Analyzer — Original Feature' },
 ];
+
+// ─── ERF APPROXIMATION (Abramowitz & Stegun 7.1.26, max error 1.5e-7) ────────
+const erf = (x: number): number => {
+  const t = 1 / (1 + 0.3275911 * Math.abs(x));
+  const poly =
+    t * (0.254829592 +
+    t * (-0.284496736 +
+    t * (1.421413741 +
+    t * (-1.453152027 +
+    t * 1.061405429))));
+  const result = 1 - poly * Math.exp(-x * x);
+  return x >= 0 ? result : -result;
+};
+
+// ─── NORMAL CDF  P(X ≤ x) ────────────────────────────────────────────────────
+const normalCDF = (x: number, mu: number, sigma: number): number => {
+  if (sigma <= 0) return NaN;
+  return 0.5 * (1 + erf((x - mu) / (sigma * Math.SQRT2)));
+};
+
+// ─── BINOMIAL CDF  P(X ≤ k) ──────────────────────────────────────────────────
+const binomialCDF = (n: number, p: number, k: number): number => {
+  if (p < 0 || p > 1 || n < 1 || k < 0) return NaN;
+  k = Math.floor(k);
+  const logFact = (m: number) => {
+    let s = 0; for (let i = 2; i <= m; i++) s += Math.log(i); return s;
+  };
+  let cdf = 0;
+  for (let i = 0; i <= k; i++) {
+    const logP = logFact(n) - logFact(i) - logFact(n - i) + i * Math.log(p) + (n - i) * Math.log(1 - p);
+    cdf += Math.exp(logP);
+  }
+  return Math.min(cdf, 1);
+};
+
+// ─── POISSON CDF  P(X ≤ k) ───────────────────────────────────────────────────
+const poissonCDF = (lambda: number, k: number): number => {
+  if (lambda <= 0 || k < 0) return NaN;
+  k = Math.floor(k);
+  let cdf = 0;
+  let term = Math.exp(-lambda);
+  cdf += term;
+  for (let i = 1; i <= k; i++) { term *= lambda / i; cdf += term; }
+  return Math.min(cdf, 1);
+};
 
 export default function Calculator() {
   // ═══ COMP STATE ═══
@@ -67,7 +112,7 @@ export default function Calculator() {
   const [tableStart, setTableStart] = useState('');
   const [tableEnd, setTableEnd] = useState('');
   const [tableStep, setTableStep] = useState('');
-  const [tableResult, setTableResult] = useState<{x: number, y: number}[]>([]);
+  const [tableResult, setTableResult] = useState<{ x: number; y: number }[]>([]);
 
   // ═══ VECTOR STATE ═══
   const [vecA, setVecA] = useState('');
@@ -113,7 +158,7 @@ export default function Calculator() {
     } catch { return null; }
   };
   const bConv = baseInput ? convertBase(baseInput, baseFrom) : null;
-  const baseDigits = baseFrom === 'BIN' ? ['0', '1'] : baseFrom === 'OCT' ? ['0', '1', '2', '3', '4', '5', '6', '7'] : baseFrom === 'HEX' ? ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'] : ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+  const baseDigits = baseFrom === 'BIN' ? ['0', '1'] : baseFrom === 'OCT' ? ['0','1','2','3','4','5','6','7'] : baseFrom === 'HEX' ? ['0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F'] : ['0','1','2','3','4','5','6','7','8','9'];
 
   // ═══ STAT HELPERS ═══
   const addStatValue = () => {
@@ -139,12 +184,44 @@ export default function Calculator() {
       }
     } else {
       if (isNaN(a) || isNaN(b) || isNaN(c) || isNaN(d) || a === 0) { setEqnResult(['Enter valid a,b,c,d (a ≠ 0)']); return; }
-      const f = (x: number) => a * x ** 3 + b * x ** 2 + c * x + d;
+      const f  = (x: number) => a * x ** 3 + b * x ** 2 + c * x + d;
       const df = (x: number) => 3 * a * x ** 2 + 2 * b * x + c;
-      const findRoot = (x0: number) => { let x = x0; for (let i = 0; i < 100; i++) { const fx = f(x); if (Math.abs(fx) < 1e-12) break; x = x - fx / df(x); } return x; };
+      const findRoot = (x0: number) => {
+        let x = x0;
+        for (let i = 0; i < 100; i++) { const fx = f(x); if (Math.abs(fx) < 1e-12) break; x = x - fx / df(x); }
+        return x;
+      };
       const r1 = findRoot(-10), r2 = findRoot(0), r3 = findRoot(10);
       const roots = [...new Set([r1, r2, r3].map(r => parseFloat(r.toFixed(8))))];
       setEqnResult(roots.map((r, i) => `x${i + 1} = ${r}`));
+    }
+  };
+
+  // ═══ DIST HELPER ═══
+  const calcDist = () => {
+    const p1 = parseFloat(distParam1);
+    const p2 = parseFloat(distParam2);
+    const x  = parseFloat(distValue);
+    if (isNaN(x)) { setDistRes('Enter a valid x value'); return; }
+
+    if (distType === 'normal') {
+      if (isNaN(p1) || isNaN(p2) || p2 <= 0) { setDistRes('Enter valid μ and σ (σ > 0)'); return; }
+      const prob = normalCDF(x, p1, p2);
+      const z    = (x - p1) / p2;
+      setDistRes(`z = ${z.toFixed(4)}\nP(X ≤ ${x}) = ${prob.toFixed(6)}\nP(X > ${x}) = ${(1 - prob).toFixed(6)}`);
+
+    } else if (distType === 'binomial') {
+      const n = Math.round(p1);
+      if (isNaN(n) || isNaN(p2) || p2 < 0 || p2 > 1 || n < 1) { setDistRes('Enter valid n (integer ≥ 1) and p (0 ≤ p ≤ 1)'); return; }
+      const cdf = binomialCDF(n, p2, x);
+      const mean = n * p2;
+      const std  = Math.sqrt(n * p2 * (1 - p2));
+      setDistRes(`P(X ≤ ${Math.floor(x)}) = ${cdf.toFixed(6)}\nMean = ${mean.toFixed(4)}\nσ = ${std.toFixed(4)}`);
+
+    } else {
+      if (isNaN(p1) || p1 <= 0) { setDistRes('Enter valid λ (λ > 0)'); return; }
+      const cdf = poissonCDF(p1, x);
+      setDistRes(`P(X ≤ ${Math.floor(x)}) = ${cdf.toFixed(6)}\nMean = λ = ${p1}\nσ = ${Math.sqrt(p1).toFixed(4)}`);
     }
   };
 
@@ -301,6 +378,7 @@ export default function Calculator() {
     </ScrollView>
   );
 
+  // ═══ RENDER CMPLX ═══
   const renderCmplx = () => (
     <ScrollView style={s.buttons}>
       <View style={s.row}>
@@ -318,11 +396,14 @@ export default function Calculator() {
         <CalcButton label="CALC =" type="equals" onPress={() => {
           const z1 = { r: parseFloat(cmplxA) || 0, i: parseFloat(cmplxB) || 0 };
           const z2 = { r: parseFloat(cmplxC) || 0, i: parseFloat(cmplxD) || 0 };
-          let res: any;
-          if (cmplxOp === '+') res = { r: z1.r + z2.r, i: z1.i + z2.i };
+          let res: { r: number; i: number };
+          if (cmplxOp === '+')      res = { r: z1.r + z2.r, i: z1.i + z2.i };
           else if (cmplxOp === '-') res = { r: z1.r - z2.r, i: z1.i - z2.i };
           else if (cmplxOp === '*') res = { r: z1.r * z2.r - z1.i * z2.i, i: z1.r * z2.i + z1.i * z2.r };
-          else res = { r: (z1.r * z2.r + z1.i * z2.i) / (z2.r * z2.r + z2.i * z2.i), i: (z1.i * z2.r - z1.r * z2.i) / (z2.r * z2.r + z2.i * z2.i) };
+          else {
+            const denom = z2.r * z2.r + z2.i * z2.i;
+            res = { r: (z1.r * z2.r + z1.i * z2.i) / denom, i: (z1.i * z2.r - z1.r * z2.i) / denom };
+          }
           setCmplxRes(`${res.r.toFixed(6)} ${res.i >= 0 ? '+' : ''} ${res.i.toFixed(6)}i`);
         }} />
       </View>
@@ -330,26 +411,46 @@ export default function Calculator() {
     </ScrollView>
   );
 
+  // ═══ RENDER MATRIX ═══
   const renderMatrix = () => (
     <ScrollView style={s.buttons}>
       <View style={s.row}>
         <CalcButton label="MODE" type="special" onPress={() => setShowModeModal(true)} />
         <CalcButton label="AC" type="clear" onPress={() => { setMatA(''); setMatB(''); setMatRes(null); }} />
       </View>
-      <Text style={{ color: '#cc6600', marginLeft: 8, marginTop: 12 }}>Matrix A (comma-sep): 1,2;3,4</Text>
-      <TextInput style={s.textInput} value={matA} onChangeText={setMatA} placeholder="[[a,b],[c,d]]" placeholderTextColor="#555" />
+      <Text style={{ color: '#cc6600', marginLeft: 8, marginTop: 12 }}>Matrix A (rows separated by ;)</Text>
+      <TextInput style={s.textInput} value={matA} onChangeText={setMatA} placeholder="1,2;3,4" placeholderTextColor="#555" />
       <Text style={{ color: '#cc6600', marginLeft: 8, marginTop: 8 }}>Matrix B</Text>
-      <TextInput style={s.textInput} value={matB} onChangeText={setMatB} placeholder="[[e,f],[g,h]]" placeholderTextColor="#555" />
+      <TextInput style={s.textInput} value={matB} onChangeText={setMatB} placeholder="5,6;7,8" placeholderTextColor="#555" />
       <View style={s.row}>
-        {['+', '-', '*'].map(op => <CalcButton key={op} label={op} type={matOp === op as any ? 'equals' : 'operator'} onPress={() => setMatOp(op as any)} />)}
+        {(['+', '-', '*'] as const).map(op => (
+          <CalcButton key={op} label={op} type={matOp === op ? 'equals' : 'operator'} onPress={() => setMatOp(op)} />
+        ))}
       </View>
       <View style={{ margin: 8 }}>
-        <CalcButton label="CALC =" type="equals" onPress={() => setMatRes(`Matrix result (demo)`)} />
+        <CalcButton label="CALC =" type="equals" onPress={() => {
+          try {
+            const parse = (s: string) => s.split(';').map(row => row.split(',').map(Number));
+            const A = parse(matA); const B = parse(matB);
+            const rows = A.length; const cols = A[0].length;
+            let R: number[][];
+            if (matOp === '+' || matOp === '-') {
+              R = A.map((row, i) => row.map((v, j) => matOp === '+' ? v + B[i][j] : v - B[i][j]));
+            } else {
+              const bCols = B[0].length;
+              R = Array.from({ length: rows }, (_, i) =>
+                Array.from({ length: bCols }, (_, j) =>
+                  A[i].reduce((sum, _, k) => sum + A[i][k] * B[k][j], 0)));
+            }
+            setMatRes(R.map(row => '[' + row.map(v => v.toFixed(2)).join(', ') + ']').join('\n'));
+          } catch { setMatRes('Error: check matrix format (e.g. 1,2;3,4)'); }
+        }} />
       </View>
-      {matRes && <View style={s.resultBox}><Text style={s.statRow}>{matRes}</Text></View>}
+      {matRes && <View style={s.resultBox}>{matRes.split('\n').map((line, i) => <Text key={i} style={s.statRow}>{line}</Text>)}</View>}
     </ScrollView>
   );
 
+  // ═══ RENDER TABLE ═══
   const renderTable = () => (
     <ScrollView style={s.buttons}>
       <View style={s.row}>
@@ -358,128 +459,194 @@ export default function Calculator() {
       </View>
       <Text style={{ color: '#cc6600', marginLeft: 8, marginTop: 12 }}>f(x) = </Text>
       <TextInput style={s.textInput} value={tableExpr} onChangeText={setTableExpr} placeholder="x^2+2*x" placeholderTextColor="#555" />
-      <TextInput style={s.textInput} value={tableStart} onChangeText={setTableStart} placeholder="Start" placeholderTextColor="#555" />
-      <TextInput style={s.textInput} value={tableEnd} onChangeText={setTableEnd} placeholder="End" placeholderTextColor="#555" />
-      <TextInput style={s.textInput} value={tableStep} onChangeText={setTableStep} placeholder="Step" placeholderTextColor="#555" />
+      <TextInput style={s.textInput} value={tableStart} onChangeText={setTableStart} placeholder="Start" placeholderTextColor="#555" keyboardType="numeric" />
+      <TextInput style={s.textInput} value={tableEnd} onChangeText={setTableEnd} placeholder="End" placeholderTextColor="#555" keyboardType="numeric" />
+      <TextInput style={s.textInput} value={tableStep} onChangeText={setTableStep} placeholder="Step" placeholderTextColor="#555" keyboardType="numeric" />
       <View style={{ margin: 8 }}>
         <CalcButton label="TABLE =" type="equals" onPress={() => {
           const start = parseFloat(tableStart) || 0;
-          const end = parseFloat(tableEnd) || 10;
-          const step = parseFloat(tableStep) || 1;
-          const result = [];
-          for (let x = start; x <= end; x += step) {
-            const y = computeExpression(tableExpr.replace(/x/g, String(x)));
-            result.push({ x, y: parseFloat(y) });
+          const end   = parseFloat(tableEnd)   || 10;
+          const step  = parseFloat(tableStep)  || 1;
+          const res: { x: number; y: number }[] = [];
+          for (let x = start; x <= end + 1e-9; x += step) {
+            const y = computeExpression(tableExpr.replace(/x/g, `(${x})`));
+            res.push({ x: parseFloat(x.toFixed(6)), y: parseFloat(y) });
           }
-          setTableResult(result);
+          setTableResult(res);
         }} />
       </View>
       {tableResult.length > 0 && (
         <View style={s.resultBox}>
-          {tableResult.map((r, i) => <Text key={i} style={s.statRow}>x={r.x.toFixed(2)}, y={r.y.toFixed(6)}</Text>)}
+          {tableResult.map((r, i) => (
+            <Text key={i} style={s.statRow}>x = {r.x.toFixed(4)}    f(x) = {isNaN(r.y) ? 'ERROR' : r.y.toFixed(6)}</Text>
+          ))}
         </View>
       )}
     </ScrollView>
   );
 
+  // ═══ RENDER VECTOR ═══
   const renderVector = () => (
     <ScrollView style={s.buttons}>
       <View style={s.row}>
         <CalcButton label="MODE" type="special" onPress={() => setShowModeModal(true)} />
         <CalcButton label="AC" type="clear" onPress={() => { setVecA(''); setVecB(''); setVecRes(null); }} />
       </View>
-      <Text style={{ color: '#cc6600', marginLeft: 8, marginTop: 12 }}>Vector A: [a, b, c]</Text>
+      <Text style={{ color: '#cc6600', marginLeft: 8, marginTop: 12 }}>Vector A: a, b, c</Text>
       <TextInput style={s.textInput} value={vecA} onChangeText={setVecA} placeholder="1,2,3" placeholderTextColor="#555" />
-      <Text style={{ color: '#cc6600', marginLeft: 8, marginTop: 8 }}>Vector B: [d, e, f]</Text>
+      <Text style={{ color: '#cc6600', marginLeft: 8, marginTop: 8 }}>Vector B: d, e, f</Text>
       <TextInput style={s.textInput} value={vecB} onChangeText={setVecB} placeholder="4,5,6" placeholderTextColor="#555" />
       <View style={s.row}>
-        <CalcButton label="·(dot)" type={vecOp === '·' ? 'equals' : 'operator'} onPress={() => setVecOp('·')} />
-        <CalcButton label="×(cross)" type={vecOp === '×' ? 'equals' : 'operator'} onPress={() => setVecOp('×')} />
+        <CalcButton label="· dot" type={vecOp === '·' ? 'equals' : 'operator'} onPress={() => setVecOp('·')} />
+        <CalcButton label="× cross" type={vecOp === '×' ? 'equals' : 'operator'} onPress={() => setVecOp('×')} />
       </View>
       <View style={{ margin: 8 }}>
         <CalcButton label="CALC =" type="equals" onPress={() => {
-          const a = vecA.split(',').map(parseFloat);
-          const b = vecB.split(',').map(parseFloat);
+          const a = vecA.split(',').map(Number);
+          const b = vecB.split(',').map(Number);
+          if (a.length < 3 || b.length < 3 || a.some(isNaN) || b.some(isNaN)) {
+            setVecRes('Enter 3 comma-separated values for each vector'); return;
+          }
           if (vecOp === '·') {
-            const res = a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-            setVecRes(`${res.toFixed(6)}`);
-          } else setVecRes('Cross product');
+            const res = a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
+            setVecRes(`A · B = ${res.toFixed(6)}\n|A| = ${Math.sqrt(a[0]**2+a[1]**2+a[2]**2).toFixed(6)}\n|B| = ${Math.sqrt(b[0]**2+b[1]**2+b[2]**2).toFixed(6)}`);
+          } else {
+            const cx = a[1]*b[2] - a[2]*b[1];
+            const cy = a[2]*b[0] - a[0]*b[2];
+            const cz = a[0]*b[1] - a[1]*b[0];
+            setVecRes(`A × B = [${cx.toFixed(6)}, ${cy.toFixed(6)}, ${cz.toFixed(6)}]\n|A × B| = ${Math.sqrt(cx**2+cy**2+cz**2).toFixed(6)}`);
+          }
         }} />
       </View>
-      {vecRes && <View style={s.resultBox}><Text style={s.statRow}>{vecRes}</Text></View>}
+      {vecRes && <View style={s.resultBox}>{vecRes.split('\n').map((line, i) => <Text key={i} style={s.statRow}>{line}</Text>)}</View>}
     </ScrollView>
   );
 
+  // ═══ RENDER INEQ ═══
   const renderIneq = () => (
     <ScrollView style={s.buttons}>
       <View style={s.row}>
         <CalcButton label="MODE" type="special" onPress={() => setShowModeModal(true)} />
         <CalcButton label="AC" type="clear" onPress={() => { setIneqLeft(''); setIneqRight(''); setIneqRes(null); }} />
       </View>
-      <TextInput style={s.textInput} value={ineqLeft} onChangeText={setIneqLeft} placeholder="Left expr" placeholderTextColor="#555" />
+      <TextInput style={s.textInput} value={ineqLeft} onChangeText={setIneqLeft} placeholder="Left expression (e.g. 2+3)" placeholderTextColor="#555" />
       <View style={s.row}>
-        {['<', '≤', '>', '≥'].map(op => <CalcButton key={op} label={op} type={ineqOp === op as any ? 'equals' : 'operator'} onPress={() => setIneqOp(op as any)} />)}
+        {(['<', '≤', '>', '≥'] as const).map(op => (
+          <CalcButton key={op} label={op} type={ineqOp === op ? 'equals' : 'operator'} onPress={() => setIneqOp(op)} />
+        ))}
       </View>
-      <TextInput style={s.textInput} value={ineqRight} onChangeText={setIneqRight} placeholder="Right expr" placeholderTextColor="#555" />
+      <TextInput style={s.textInput} value={ineqRight} onChangeText={setIneqRight} placeholder="Right expression (e.g. 10)" placeholderTextColor="#555" />
       <View style={{ margin: 8 }}>
         <CalcButton label="TEST =" type="equals" onPress={() => {
-          const l = computeExpression(ineqLeft);
-          const r = computeExpression(ineqRight);
-          const lv = parseFloat(l); const rv = parseFloat(r);
-          const valid = ineqOp === '<' ? lv < rv : ineqOp === '≤' ? lv <= rv : ineqOp === '>' ? lv > rv : lv >= rv;
-          setIneqRes(valid ? 'TRUE' : 'FALSE');
+          const l  = parseFloat(computeExpression(ineqLeft));
+          const r  = parseFloat(computeExpression(ineqRight));
+          const ok = ineqOp === '<' ? l < r : ineqOp === '≤' ? l <= r : ineqOp === '>' ? l > r : l >= r;
+          setIneqRes(`${l} ${ineqOp} ${r}  →  ${ok ? 'TRUE' : 'FALSE'}`);
         }} />
       </View>
-      {ineqRes && <View style={s.resultBox}><Text style={[s.statRow, { color: ineqRes === 'TRUE' ? '#00ff00' : '#ff6666' }]}>{ineqRes}</Text></View>}
+      {ineqRes && (
+        <View style={s.resultBox}>
+          <Text style={[s.statRow, { color: ineqRes.includes('TRUE') ? '#007700' : '#aa0000', fontWeight: '700' }]}>{ineqRes}</Text>
+        </View>
+      )}
     </ScrollView>
   );
 
+  // ═══ RENDER VERIF ═══
   const renderVerif = () => (
     <ScrollView style={s.buttons}>
       <View style={s.row}>
         <CalcButton label="MODE" type="special" onPress={() => setShowModeModal(true)} />
         <CalcButton label="AC" type="clear" onPress={() => { setVerifExpr(''); setVerifRes(null); }} />
       </View>
-      <Text style={{ color: '#cc6600', marginLeft: 8, marginTop: 12 }}>Expression (use = to compare)</Text>
-      <TextInput style={s.textInput} value={verifExpr} onChangeText={setVerifExpr} placeholder="2+2 = 4" placeholderTextColor="#555" />
+      <Text style={{ color: '#cc6600', marginLeft: 8, marginTop: 12 }}>Enter equation to verify (use = to compare)</Text>
+      <TextInput style={s.textInput} value={verifExpr} onChangeText={setVerifExpr} placeholder="e.g.  sin(30)^2 + cos(30)^2 = 1" placeholderTextColor="#555" />
       <View style={{ margin: 8 }}>
         <CalcButton label="VERIFY =" type="equals" onPress={() => {
           const parts = verifExpr.split('=');
           if (parts.length !== 2) { setVerifRes(false); return; }
-          const l = computeExpression(parts[0]);
-          const r = computeExpression(parts[1]);
-          setVerifRes(Math.abs(parseFloat(l) - parseFloat(r)) < 0.0001);
+          const l = computeExpression(parts[0].trim());
+          const r = computeExpression(parts[1].trim());
+          setVerifRes(Math.abs(parseFloat(l) - parseFloat(r)) < 1e-4);
         }} />
       </View>
-      {verifRes !== null && <View style={s.resultBox}><Text style={[s.statRow, { color: verifRes ? '#00ff00' : '#ff6666' }]}>{verifRes ? '✓ TRUE' : '✗ FALSE'}</Text></View>}
+      {verifRes !== null && (
+        <View style={s.resultBox}>
+          <Text style={[s.statRow, { color: verifRes ? '#007700' : '#aa0000', fontWeight: '700', fontSize: 16 }]}>
+            {verifRes ? '✓  TRUE' : '✗  FALSE'}
+          </Text>
+        </View>
+      )}
     </ScrollView>
   );
 
+  // ═══ RENDER DIST (FIXED — no Math.erf) ═══
   const renderDist = () => (
     <ScrollView style={s.buttons}>
       <View style={s.row}>
         <CalcButton label="MODE" type="special" onPress={() => setShowModeModal(true)} />
-        <CalcButton label="AC" type="clear" onPress={() => { setDistRes(null); }} />
+        <CalcButton label="AC" type="clear" onPress={() => { setDistRes(null); setDistParam1(''); setDistParam2(''); setDistValue(''); }} />
       </View>
+
+      {/* Distribution type selector */}
       <View style={s.row}>
-        {['Normal', 'Binomial', 'Poisson'].map((d, i) => (
-          <CalcButton key={d} label={d} type={distType === ['normal', 'binomial', 'poisson'][i] ? 'equals' : 'special'} onPress={() => setDistType(['normal', 'binomial', 'poisson'][i] as any)} />
+        {(['normal', 'binomial', 'poisson'] as const).map((d, i) => (
+          <CalcButton
+            key={d}
+            label={['Normal', 'Binom', 'Poisson'][i]}
+            type={distType === d ? 'equals' : 'special'}
+            onPress={() => { setDistType(d); setDistRes(null); }}
+          />
         ))}
       </View>
-      <TextInput style={s.textInput} value={distParam1} onChangeText={setDistParam1} placeholder={distType === 'normal' ? 'μ (mean)' : distType === 'binomial' ? 'n' : 'λ'} placeholderTextColor="#555" />
-      <TextInput style={s.textInput} value={distParam2} onChangeText={setDistParam2} placeholder={distType === 'normal' ? 'σ (std)' : 'p'} placeholderTextColor="#555" />
-      <TextInput style={s.textInput} value={distValue} onChangeText={setDistValue} placeholder="x value" placeholderTextColor="#555" />
+
+      {/* Parameter labels change per distribution */}
+      <Text style={{ color: '#888', marginLeft: 8, marginTop: 10, fontSize: 11 }}>
+        {distType === 'normal'
+          ? 'Normal Distribution: enter μ, σ, then x'
+          : distType === 'binomial'
+          ? 'Binomial Distribution: enter n (trials), p (prob), then k'
+          : 'Poisson Distribution: enter λ (rate), then k'}
+      </Text>
+
+      <TextInput
+        style={s.textInput}
+        keyboardType="numeric"
+        value={distParam1}
+        onChangeText={setDistParam1}
+        placeholder={distType === 'normal' ? 'μ  (mean)' : distType === 'binomial' ? 'n  (number of trials)' : 'λ  (average rate)'}
+        placeholderTextColor="#555"
+      />
+      {distType !== 'poisson' && (
+        <TextInput
+          style={s.textInput}
+          keyboardType="numeric"
+          value={distParam2}
+          onChangeText={setDistParam2}
+          placeholder={distType === 'normal' ? 'σ  (std deviation, σ > 0)' : 'p  (probability, 0 ≤ p ≤ 1)'}
+          placeholderTextColor="#555"
+        />
+      )}
+      <TextInput
+        style={s.textInput}
+        keyboardType="numeric"
+        value={distValue}
+        onChangeText={setDistValue}
+        placeholder={distType === 'normal' ? 'x  (value)' : 'k  (integer value)'}
+        placeholderTextColor="#555"
+      />
+
       <View style={{ margin: 8 }}>
-        <CalcButton label="P(X) =" type="equals" onPress={() => {
-          const p1 = parseFloat(distParam1) || 0; const p2 = parseFloat(distParam2) || 0; const x = parseFloat(distValue) || 0;
-          if (distType === 'normal') {
-            const z = (x - p1) / p2;
-            const prob = 0.5 * (1 + Math.erf(z / Math.sqrt(2)));
-            setDistRes(`P(X≤${x}) = ${prob.toFixed(6)}`);
-          } else setDistRes(`${distType}: Demo`);
-        }} />
+        <CalcButton label="P(X) =" type="equals" onPress={calcDist} />
       </View>
-      {distRes && <View style={s.resultBox}><Text style={s.statRow}>{distRes}</Text></View>}
+
+      {distRes && (
+        <View style={s.resultBox}>
+          {distRes.split('\n').map((line, i) => (
+            <Text key={i} style={[s.statRow, i === 0 && { fontWeight: '700', fontSize: 14 }]}>{line}</Text>
+          ))}
+        </View>
+      )}
     </ScrollView>
   );
 
@@ -492,24 +659,27 @@ export default function Calculator() {
         <Text style={s.modeTag}>{currentMode} | {angleModeLabel}</Text>
       </View>
 
-      {currentMode === 'COMP' && <Display expression={expression} result={result ? parseFloat(result) : null} shiftActive={shiftActive} />}
-      {currentMode === 'COMP' && renderComp()}
-      {currentMode === 'CMPLX' && renderCmplx()}
-      {currentMode === 'STAT' && renderStat()}
+      {currentMode === 'COMP'   && <Display expression={expression} result={result ? parseFloat(result) : null} shiftActive={shiftActive} />}
+      {currentMode === 'COMP'   && renderComp()}
+      {currentMode === 'CMPLX'  && renderCmplx()}
+      {currentMode === 'STAT'   && renderStat()}
       {currentMode === 'BASE-N' && renderBaseN()}
-      {currentMode === 'EQN' && renderEqn()}
+      {currentMode === 'EQN'    && renderEqn()}
       {currentMode === 'MATRIX' && renderMatrix()}
-      {currentMode === 'TABLE' && renderTable()}
+      {currentMode === 'TABLE'  && renderTable()}
       {currentMode === 'VECTOR' && renderVector()}
-      {currentMode === 'INEQ' && renderIneq()}
-      {currentMode === 'VERIF' && renderVerif()}
-      {currentMode === 'DIST' && renderDist()}
-      {currentMode === 'ECON' && (
+      {currentMode === 'INEQ'   && renderIneq()}
+      {currentMode === 'VERIF'  && renderVerif()}
+      {currentMode === 'DIST'   && renderDist()}
+      {currentMode === 'ECON'   && (
         <View style={s.buttons}>
           <View style={s.row}>
             <CalcButton label="MODE" type="special" onPress={() => setShowModeModal(true)} />
           </View>
-          <Pressable onPress={() => router.push('/(tabs)/cashflow')} style={[s.displayBox, { justifyContent: 'center', marginVertical: 80 }]}>
+          <Pressable
+            onPress={() => router.push('/(tabs)/cashflow')}
+            style={[s.displayBox, { justifyContent: 'center', marginVertical: 80 }]}
+          >
             <Text style={{ color: '#88ff88', fontSize: 26, fontWeight: '700', textAlign: 'center' }}>CASH FLOW</Text>
             <Text style={{ color: '#66cc66', fontSize: 14, textAlign: 'center', marginTop: 12 }}>Tap to open analyzer</Text>
           </Pressable>
@@ -522,7 +692,15 @@ export default function Calculator() {
             <Text style={s.modalTitle}>SELECT MODE</Text>
             <ScrollView>
               {ALL_MODES.map(m => (
-                <Pressable key={m.id} style={s.modeRow} onPress={() => { setShowModeModal(false); if (m.id === 'ECON') { router.push('/(tabs)/cashflow'); } else { setCurrentMode(m.id); } }}>
+                <Pressable
+                  key={m.id}
+                  style={s.modeRow}
+                  onPress={() => {
+                    setShowModeModal(false);
+                    if (m.id === 'ECON') { router.push('/(tabs)/cashflow'); }
+                    else { setCurrentMode(m.id); }
+                  }}
+                >
                   <Text style={s.modeNum}>{m.num}</Text>
                   <View>
                     <Text style={s.modeName}>{m.name}</Text>
@@ -542,32 +720,32 @@ export default function Calculator() {
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0a0a0a', paddingTop: 36 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 12, paddingBottom: 4 },
-  headerText: { color: '#cc6600', fontSize: 12, fontWeight: '700', letterSpacing: 1.5 },
-  modeTag: { color: '#666', fontSize: 12 },
-  buttons: { flex: 1, padding: 6 },
-  row: { flexDirection: 'row', marginBottom: 3 },
-  displayBox: { backgroundColor: '#111', margin: 8, borderRadius: 6, padding: 12 },
-  baseInputText: { color: '#88ff88', fontSize: 22 },
-  resultBox: { backgroundColor: '#c8d8a0', margin: 8, borderRadius: 6, padding: 10 },
-  baseResultRow: { color: '#1a3a1a', fontSize: 13, marginVertical: 1 },
-  baseLabel: { fontWeight: '700' },
+  container:    { flex: 1, backgroundColor: '#0a0a0a', paddingTop: 36 },
+  header:       { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 12, paddingBottom: 4 },
+  headerText:   { color: '#cc6600', fontSize: 12, fontWeight: '700', letterSpacing: 1.5 },
+  modeTag:      { color: '#666', fontSize: 12 },
+  buttons:      { flex: 1, padding: 6 },
+  row:          { flexDirection: 'row', marginBottom: 3 },
+  displayBox:   { backgroundColor: '#111', margin: 8, borderRadius: 6, padding: 12 },
+  baseInputText:{ color: '#88ff88', fontSize: 22 },
+  resultBox:    { backgroundColor: '#c8d8a0', margin: 8, borderRadius: 6, padding: 10 },
+  baseResultRow:{ color: '#1a3a1a', fontSize: 13, marginVertical: 1 },
+  baseLabel:    { fontWeight: '700' },
   baseDigitBtn: { backgroundColor: '#2a2a2a', margin: 3, borderRadius: 5, padding: 12, minWidth: 48, alignItems: 'center' },
-  baseDigitText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  textInput: { flex: 1, backgroundColor: '#1a1a1a', color: '#fff', borderRadius: 4, padding: 8, fontSize: 16, margin: 4, borderWidth: 1, borderColor: '#333' },
-  statRow: { color: '#1a3a1a', fontSize: 13, marginVertical: 2 },
-  statKey: { fontWeight: '700' },
-  eqnLabel: { backgroundColor: '#1a2a1a', margin: 8, padding: 8, borderRadius: 6 },
-  eqnFormula: { color: '#88dd88', fontSize: 14, textAlign: 'center' },
-  eqnRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 8, marginVertical: 4 },
-  eqnCoeffLabel: { color: '#cc6600', width: 32, fontSize: 18, fontWeight: '700' },
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.88)', justifyContent: 'center', alignItems: 'center' },
-  modal: { backgroundColor: '#1a1a1a', width: '85%', borderRadius: 10, padding: 16, maxHeight: '78%' },
-  modalTitle: { color: '#cc6600', fontSize: 16, fontWeight: '700', letterSpacing: 2, textAlign: 'center', marginBottom: 12 },
-  modeRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#2a2a2a' },
-  modeNum: { color: '#cc6600', width: 40, fontSize: 15, fontWeight: '700' },
-  modeName: { color: '#fff', fontSize: 14, fontWeight: '600' },
-  modeDesc: { color: '#777', fontSize: 11 },
-  modalCancel: { marginTop: 12, backgroundColor: '#333', padding: 10, borderRadius: 6, alignItems: 'center' },
+  baseDigitText:{ color: '#fff', fontSize: 16, fontWeight: '600' },
+  textInput:    { flex: 1, backgroundColor: '#1a1a1a', color: '#fff', borderRadius: 4, padding: 8, fontSize: 16, margin: 4, borderWidth: 1, borderColor: '#333' },
+  statRow:      { color: '#1a3a1a', fontSize: 13, marginVertical: 2 },
+  statKey:      { fontWeight: '700' },
+  eqnLabel:     { backgroundColor: '#1a2a1a', margin: 8, padding: 8, borderRadius: 6 },
+  eqnFormula:   { color: '#88dd88', fontSize: 14, textAlign: 'center' },
+  eqnRow:       { flexDirection: 'row', alignItems: 'center', marginHorizontal: 8, marginVertical: 4 },
+  eqnCoeffLabel:{ color: '#cc6600', width: 32, fontSize: 18, fontWeight: '700' },
+  overlay:      { flex: 1, backgroundColor: 'rgba(0,0,0,0.88)', justifyContent: 'center', alignItems: 'center' },
+  modal:        { backgroundColor: '#1a1a1a', width: '85%', borderRadius: 10, padding: 16, maxHeight: '78%' },
+  modalTitle:   { color: '#cc6600', fontSize: 16, fontWeight: '700', letterSpacing: 2, textAlign: 'center', marginBottom: 12 },
+  modeRow:      { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#2a2a2a' },
+  modeNum:      { color: '#cc6600', width: 40, fontSize: 15, fontWeight: '700' },
+  modeName:     { color: '#fff', fontSize: 14, fontWeight: '600' },
+  modeDesc:     { color: '#777', fontSize: 11 },
+  modalCancel:  { marginTop: 12, backgroundColor: '#333', padding: 10, borderRadius: 6, alignItems: 'center' },
 });
