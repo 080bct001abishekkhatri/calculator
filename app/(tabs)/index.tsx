@@ -5,6 +5,7 @@ import CalcButton from '../../components/CalcButton';
 import Display from '../../components/Display';
 import { saveToHistory } from '../../utils/history';
 import { computeExpression, computeStats, getLastAnswer, setAngleMode, setLastAnswer } from '../../utils/mathEngine';
+import MiniGraph from '../../components/MiniGraph';
 
 const ALL_MODES = [
   { id: 'COMP',   num: '1',  name: 'COMP',   desc: 'General Computations (Default)' },
@@ -92,6 +93,8 @@ export default function Calculator() {
   const [eqnC, setEqnC] = useState('');
   const [eqnD, setEqnD] = useState('');
   const [eqnResult, setEqnResult] = useState<string[]>([]);
+  const [eqnGraph,  setEqnGraph]  = useState<{points:{x:number;y:number}[]; roots:number[]} | null>(null);
+  const [tableGraph,setTableGraph]= useState<{x:number;y:number}[] | null>(null);
 
   // ═══ CMPLX STATE ═══
   const [cmplxA, setCmplxA] = useState('');
@@ -168,32 +171,67 @@ export default function Calculator() {
   const runStats = () => setStatResult(computeStats(statValues));
 
   // ═══ EQN HELPERS ═══
+  // Bisection scan — finds ALL real roots reliably, no missed roots
+  const bisectScan = (fn: (x:number)=>number, lo=-12, hi=12, steps=2000): number[] => {
+    const dx = (hi - lo) / steps;
+    const found: number[] = [];
+    for (let i = 0; i < steps; i++) {
+      const x1 = lo + i * dx, x2 = x1 + dx;
+      if (fn(x1) * fn(x2) <= 0) {
+        let a = x1, b = x2;
+        for (let j = 0; j < 60; j++) {
+          const m = (a + b) / 2;
+          if (Math.abs(b - a) < 1e-9) { found.push(m); break; }
+          fn(a) * fn(m) <= 0 ? b = m : a = m;
+        }
+      }
+    }
+    // deduplicate with tolerance
+    return found.reduce((acc: number[], v) =>
+      acc.some(u => Math.abs(u - v) < 1e-5) ? acc : [...acc, v], []).sort((a,b)=>a-b);
+  };
+
+  const buildGraph = (fn: (x:number)=>number, roots: number[], xMin: number, xMax: number) => {
+    const pts = Array.from({ length: 300 }, (_, i) => {
+      const x = xMin + i * (xMax - xMin) / 299;
+      return { x, y: fn(x) };
+    });
+    setEqnGraph({ points: pts, roots });
+  };
+
   const solveEqn = () => {
     const a = parseFloat(eqnA), b = parseFloat(eqnB), c = parseFloat(eqnC), d = parseFloat(eqnD);
     if (eqnType === 'quad') {
-      if (isNaN(a) || isNaN(b) || isNaN(c) || a === 0) { setEqnResult(['Enter valid a, b, c (a ≠ 0)']); return; }
+      if (isNaN(a) || isNaN(b) || isNaN(c) || a === 0) { setEqnResult(['Enter valid a, b, c (a ≠ 0)']); setEqnGraph(null); return; }
       const disc = b * b - 4 * a * c;
+      let realRoots: number[] = [];
       if (disc < 0) {
         const re = (-b) / (2 * a);
         const im = Math.sqrt(-disc) / (2 * a);
         setEqnResult([`x₁ = ${re.toFixed(6)} + ${im.toFixed(6)}i`, `x₂ = ${re.toFixed(6)} - ${im.toFixed(6)}i`]);
+        // complex roots — still graph the parabola, no root markers
       } else {
         const x1 = (-b + Math.sqrt(disc)) / (2 * a);
         const x2 = (-b - Math.sqrt(disc)) / (2 * a);
-        setEqnResult([`x₁ = ${x1.toFixed(8)}`, `x₂ = ${x2.toFixed(8)}`]);
+        realRoots = [...new Set([x1, x2])].sort((p,q)=>p-q);
+        setEqnResult(realRoots.map((r, i) => `x${i+1} = ${r.toFixed(8)}`));
       }
+      // Graph: center around vertex ±4 units
+      const vertex = -b / (2 * a);
+      const spread = Math.max(4, Math.abs(vertex) * 0.5 + 4);
+      const fn = (x: number) => a*x*x + b*x + c;
+      buildGraph(fn, realRoots, vertex - spread, vertex + spread);
     } else {
-      if (isNaN(a) || isNaN(b) || isNaN(c) || isNaN(d) || a === 0) { setEqnResult(['Enter valid a,b,c,d (a ≠ 0)']); return; }
-      const f  = (x: number) => a * x ** 3 + b * x ** 2 + c * x + d;
-      const df = (x: number) => 3 * a * x ** 2 + 2 * b * x + c;
-      const findRoot = (x0: number) => {
-        let x = x0;
-        for (let i = 0; i < 100; i++) { const fx = f(x); if (Math.abs(fx) < 1e-12) break; x = x - fx / df(x); }
-        return x;
-      };
-      const r1 = findRoot(-10), r2 = findRoot(0), r3 = findRoot(10);
-      const roots = [...new Set([r1, r2, r3].map(r => parseFloat(r.toFixed(8))))];
-      setEqnResult(roots.map((r, i) => `x${i + 1} = ${r}`));
+      if (isNaN(a) || isNaN(b) || isNaN(c) || isNaN(d) || a === 0) { setEqnResult(['Enter valid a,b,c,d (a ≠ 0)']); setEqnGraph(null); return; }
+      const fn = (x: number) => a*x**3 + b*x**2 + c*x + d;
+      const roots = bisectScan(fn);
+      setEqnResult(roots.length > 0
+        ? roots.map((r, i) => `x${i+1} = ${r.toFixed(8)}`)
+        : ['No real roots found in [-12, 12]']);
+      // Graph range: around roots or default
+      const xMin = roots.length > 0 ? Math.min(...roots) - 2.5 : -5;
+      const xMax = roots.length > 0 ? Math.max(...roots) + 2.5 : 5;
+      buildGraph(fn, roots, xMin, xMax);
     }
   };
 
@@ -352,7 +390,7 @@ export default function Calculator() {
     <ScrollView style={s.buttons}>
       <View style={s.row}>
         <CalcButton label="MODE" type="special" onPress={() => setShowModeModal(true)} />
-        <CalcButton label="AC" type="clear" onPress={() => { setEqnA(''); setEqnB(''); setEqnC(''); setEqnD(''); setEqnResult([]); }} />
+        <CalcButton label="AC" type="clear" onPress={() => { setEqnA(''); setEqnB(''); setEqnC(''); setEqnD(''); setEqnResult([]); setEqnGraph(null); }} />
       </View>
       <View style={s.row}>
         <CalcButton label="Quadratic" type={eqnType === 'quad' ? 'equals' : 'special'} onPress={() => { setEqnType('quad'); setEqnResult([]); }} />
@@ -374,6 +412,17 @@ export default function Calculator() {
         <View style={s.resultBox}>
           {eqnResult.map((r, i) => <Text key={i} style={s.statRow}>{r}</Text>)}
         </View>
+      )}
+      {eqnGraph && (
+        <MiniGraph
+          points={eqnGraph.points}
+          roots={eqnGraph.roots}
+          label={eqnType === 'quad'
+            ? `f(x) = ${eqnA}x² + ${eqnB}x + ${eqnC}`
+            : `f(x) = ${eqnA}x³ + ${eqnB}x² + ${eqnC}x + ${eqnD}`}
+          W={320}
+          H={200}
+        />
       )}
     </ScrollView>
   );
@@ -455,7 +504,7 @@ export default function Calculator() {
     <ScrollView style={s.buttons}>
       <View style={s.row}>
         <CalcButton label="MODE" type="special" onPress={() => setShowModeModal(true)} />
-        <CalcButton label="AC" type="clear" onPress={() => { setTableExpr(''); setTableStart(''); setTableEnd(''); setTableStep(''); setTableResult([]); }} />
+        <CalcButton label="AC" type="clear" onPress={() => { setTableExpr(''); setTableStart(''); setTableEnd(''); setTableStep(''); setTableResult([]); setTableGraph(null); }} />
       </View>
       <Text style={{ color: '#cc6600', marginLeft: 8, marginTop: 12 }}>f(x) = </Text>
       <TextInput style={s.textInput} value={tableExpr} onChangeText={setTableExpr} placeholder="x^2+2*x" placeholderTextColor="#555" />
@@ -473,6 +522,7 @@ export default function Calculator() {
             res.push({ x: parseFloat(x.toFixed(6)), y: parseFloat(y) });
           }
           setTableResult(res);
+          setTableGraph(res.filter(p => isFinite(p.y)));
         }} />
       </View>
       {tableResult.length > 0 && (
@@ -481,6 +531,14 @@ export default function Calculator() {
             <Text key={i} style={s.statRow}>x = {r.x.toFixed(4)}    f(x) = {isNaN(r.y) ? 'ERROR' : r.y.toFixed(6)}</Text>
           ))}
         </View>
+      )}
+      {tableGraph && tableGraph.length > 1 && (
+        <MiniGraph
+          points={tableGraph}
+          label={`f(x) = ${tableExpr}`}
+          W={320}
+          H={180}
+        />
       )}
     </ScrollView>
   );
@@ -724,8 +782,8 @@ const s = StyleSheet.create({
   header:       { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 12, paddingBottom: 4 },
   headerText:   { color: '#cc6600', fontSize: 12, fontWeight: '700', letterSpacing: 1.5 },
   modeTag:      { color: '#666', fontSize: 12 },
-  buttons:      { flex: 1, padding: 6 },
-  row:          { flexDirection: 'row', marginBottom: 3 },
+  buttons:      { flex: 1, padding: 6, justifyContent: 'space-between' },
+  row:          { flexDirection: 'row', flex: 1 },
   displayBox:   { backgroundColor: '#111', margin: 8, borderRadius: 6, padding: 12 },
   baseInputText:{ color: '#88ff88', fontSize: 22 },
   resultBox:    { backgroundColor: '#c8d8a0', margin: 8, borderRadius: 6, padding: 10 },

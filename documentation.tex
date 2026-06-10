@@ -1,0 +1,257 @@
+\documentclass[12pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,graphicx,booktabs,hyperref,xcolor,tcolorbox,enumitem,array}
+\tcbuselibrary{skins,breakable}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+
+\hypersetup{colorlinks=true,linkcolor=orange!70!black,urlcolor=orange!70!black}
+\definecolor{casio}{RGB}{204,102,0}
+
+\tcbset{
+  econbox/.style={colback=orange!5!white,colframe=casio,fonttitle=\bfseries,
+    attach boxed title to top left={yshift=-2mm,xshift=4mm},
+    boxed title style={colback=casio},breakable},
+  featurebox/.style={colback=green!4!white,colframe=green!40!black,
+    fonttitle=\bfseries,breakable},
+  infobox/.style={colback=blue!4!white,colframe=blue!40!black,breakable}
+}
+
+\title{
+  \vspace{-1cm}
+  {\large\color{casio}\textbf{MINI PROJECT DOCUMENTATION}}\\[0.4em]
+  {\Huge\textbf{EconCalc}}\\[0.3em]
+  {\large\textit{fx-991ES PLUS Edition --- Android Scientific Calculator}}\\[0.2em]
+  {\normalsize ENCE 356 --- Engineering Economics}
+}
+\author{
+  \textbf{Abishek Khatri}\\
+  Roll No: \texttt{JEC080BCT001}\\
+  Janakpur Engineering College, Tribhuvan University --- IOE\\
+  B.E.\ Computer Engineering, Year III
+}
+\date{2082 B.S.\ (2025 A.D.)}
+
+\begin{document}
+\maketitle
+\begin{center}\color{casio}\rule{0.8\textwidth}{1.5pt}\end{center}
+\vspace{0.5em}
+\tableofcontents
+\newpage
+
+%% ── 1. Overview ──────────────────────────────────────────────────────────────
+\section{Project Overview}
+
+\begin{tcolorbox}[infobox,title=Declaration of Authorship]
+I declare that this application --- \textbf{EconCalc} --- is my original and independent work.
+The ECON mode (Cash Flow Analyzer) is an original feature not present in the physical
+Casio fx-991ES PLUS calculator. All code was written by the author.
+\end{tcolorbox}
+
+\vspace{0.5em}
+\textbf{EconCalc} is an Android scientific calculator application inspired by the Casio fx-991ES PLUS.
+It replicates the full functionality of the physical calculator in a mobile app, adds an original
+Engineering Economics analysis mode (ECON Mode), and includes a graphical equation solver.
+
+\subsection{Motivation}
+The physical Casio fx-991ES PLUS has key limitations in an Engineering Economics course:
+\begin{itemize}[leftmargin=1.5em]
+  \item Cannot compute Net Present Value (NPV) from variable cash flows
+  \item Cannot compute Future Worth (FW) or Annual Worth (AW)
+  \item Requires manual lookup from printed Appendix A factor tables
+  \item No visual representation of cash flow timelines
+\end{itemize}
+EconCalc solves all of these with its original \textbf{ECON Mode}.
+
+%% ── 2. Tech Stack ────────────────────────────────────────────────────────────
+\section{Technical Stack}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Technology} & \textbf{Version} & \textbf{Purpose} \\
+\midrule
+React Native     & ---  & Cross-platform mobile framework \\
+Expo SDK         & 53   & Build toolchain, device APIs \\
+TypeScript       & ---  & Type-safe development \\
+mathjs           & ---  & Mathematical expression evaluation \\
+AsyncStorage     & ---  & Persistent calculation history \\
+Expo Router      & ---  & Tab-based navigation \\
+react-native-svg & ---  & Graph rendering (EQN / TABLE modes) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Project Structure}
+\begin{verbatim}
+project/
+├── app/
+│   ├── _layout.tsx          Startup splash + root navigator
+│   └── (tabs)/
+│       ├── index.tsx        Main calculator (12 modes)
+│       ├── cashflow.tsx     ECON Cash Flow Analyzer
+│       ├── history.tsx      Calculation history
+│       └── exit.tsx         About / Exit screen
+├── components/
+│   ├── CalcButton.tsx       Calculator button component
+│   ├── Display.tsx          Dot-matrix style display
+│   └── MiniGraph.tsx        SVG graph component
+└── utils/
+    ├── mathEngine.js        Expression evaluator (mathjs)
+    ├── cashflow.js          TVM formula engine
+    └── history.js           AsyncStorage persistence
+\end{verbatim}
+
+%% ── 3. Features ──────────────────────────────────────────────────────────────
+\section{Features}
+
+\subsection{All 11 Standard Casio Modes}
+\begin{center}
+\begin{tabular}{clp{8cm}}
+\toprule
+\textbf{No.} & \textbf{Mode} & \textbf{Description} \\
+\midrule
+1  & COMP   & General computations --- arithmetic, scientific functions, SHIFT/ALPHA \\
+2  & CMPLX  & Complex arithmetic $(a+bi)$ --- add, subtract, multiply, divide \\
+3  & STAT   & Statistics --- mean, median, $\sigma$, variance, min/max, $\Sigma x$ \\
+4  & BASE-N & Number base converter --- DEC, BIN, OCT, HEX \\
+5  & EQN    & Equation solver --- quadratic and cubic with graph output \\
+6  & MATRIX & Matrix operations --- addition, subtraction, multiplication \\
+7  & TABLE  & Function table $f(x)$ over a range with graph output \\
+8  & VECTOR & Dot product $\mathbf{A}\cdot\mathbf{B}$ and cross product $\mathbf{A}\times\mathbf{B}$ \\
+9  & INEQ   & Inequality tester --- $<,\leq,>,\geq$ between expressions \\
+10 & VERIF  & Equation verifier --- checks LHS $=$ RHS within tolerance \\
+11 & DIST   & Statistical distributions --- Normal, Binomial, Poisson CDF \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Additional Features}
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Calculation History} --- last 50 entries stored via AsyncStorage
+  \item \textbf{SHIFT/ALPHA toggle} --- mirrors physical Casio behavior
+  \item \textbf{Angle mode} --- DEG/RAD toggle affecting all trig functions
+  \item \textbf{Ans key} --- recalls last answer into current expression
+  \item \textbf{Startup splash} --- photo, name, roll number, declaration
+  \item \textbf{Exit screen} --- authorship card with EXIT APP button
+\end{itemize}
+
+%% ── 4. Original Feature ──────────────────────────────────────────────────────
+\section{Original Feature: ECON Mode --- Cash Flow Analyzer}
+
+\begin{tcolorbox}[econbox,title={$\bigstar$\; Original Feature}]
+\textbf{ECON Mode} is the original feature of EconCalc. It does not exist in the physical
+Casio fx-991ES PLUS and directly addresses a limitation in the ENCE 356 course.
+\end{tcolorbox}
+
+\subsection{Mathematical Formulas}
+
+The six standard TVM factors for interest rate $i$ and periods $n$:
+\begin{align}
+  P/F &= \frac{1}{(1+i)^n}, & F/P &= (1+i)^n, \\[4pt]
+  P/A &= \frac{(1+i)^n-1}{i(1+i)^n}, & A/P &= \frac{i(1+i)^n}{(1+i)^n-1}, \\[4pt]
+  F/A &= \frac{(1+i)^n-1}{i}, & A/F &= \frac{i}{(1+i)^n-1}.
+\end{align}
+
+Net Present Value from variable cash flows $C_t$:
+\[
+  \mathrm{NPV} = \sum_{t=0}^{n} \frac{C_t}{(1+i)^t}, \qquad
+  \mathrm{FW} = \mathrm{NPV}\times(1+i)^n, \qquad
+  \mathrm{AW} = \mathrm{NPV}\times(A/P,\,i,\,n).
+\]
+
+\subsection{Verification Against Textbook}
+Test: Rs.~50,000 investment, Rs.~15,000/year inflow for 5 years, $i=10\%$.
+
+\begin{center}
+\begin{tabular}{llll}
+\toprule
+\textbf{Quantity} & \textbf{Computed} & \textbf{Textbook} & \textbf{Match} \\
+\midrule
+$P/F$ & 0.620921  & 0.620921  & \checkmark \\
+$P/A$ & 3.790787  & 3.790787  & \checkmark \\
+$A/P$ & 0.263797  & 0.263797  & \checkmark \\
+NPV   & 6{,}861.80 & 6{,}861.81 & \checkmark \\
+FW    & 11{,}051.00 & 11{,}051.01 & \checkmark \\
+AW    & 1{,}810.13  & 1{,}810.13  & \checkmark \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{ECON Mode Features}
+\begin{tcolorbox}[featurebox,title=What ECON Mode provides]
+\begin{itemize}[leftmargin=1.5em,nosep]
+  \item Variable cash flow entry for $t=0$ through $t=n$ (inflows and outflows)
+  \item NPV, FW, and AW computed with 4-decimal precision
+  \item Full factor table for all 6 TVM factors
+  \item Visual cash flow timeline diagram (scrollable)
+  \item Automatic \textbf{ACCEPT / REJECT} decision based on NPV sign
+  \item Replaces Appendix A printed factor tables from ENCE 356 textbook
+\end{itemize}
+\end{tcolorbox}
+
+%% ── 5. Graph Feature ─────────────────────────────────────────────────────────
+\section{Graph Feature}
+
+EconCalc includes an SVG-based graphing engine (\texttt{react-native-svg}) that activates
+automatically in two modes:
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{EQN Mode} --- plots the curve after solving, with orange dots on real roots.
+        Uses bisection scan across 2,000 intervals to guarantee all roots are found.
+  \item \textbf{TABLE Mode} --- sparkline graph shown below the $f(x)$ numerical table.
+\end{itemize}
+Features: auto-scaling axes, gridlines, smart tick labels, discontinuity detection.
+
+%% ── 6. Statistical Distributions ────────────────────────────────────────────
+\section{Statistical Distributions (DIST Mode)}
+
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Normal CDF} (Abramowitz \& Stegun 7.1.26, error $<1.5\times10^{-7}$):
+  \[P(X\leq x)=\tfrac{1}{2}\!\left[1+\mathrm{erf}\!\left(\tfrac{x-\mu}{\sigma\sqrt{2}}\right)\right]\]
+  \item \textbf{Binomial CDF} (log-factorial to avoid overflow):
+  \[P(X\leq k)=\sum_{i=0}^{k}\binom{n}{i}p^i(1-p)^{n-i}\]
+  \item \textbf{Poisson CDF} (running term update):
+  \[P(X\leq k)=e^{-\lambda}\sum_{i=0}^{k}\frac{\lambda^i}{i!}\]
+\end{itemize}
+Note: \texttt{Math.erf} is absent from JavaScript. A custom polynomial approximation
+was implemented and verified against standard z-tables.
+
+%% ── 7. Build Instructions ────────────────────────────────────────────────────
+\section{Build \& Run Instructions}
+
+\subsection{Run on Device (Expo Go)}
+\begin{verbatim}
+npm install
+npx expo start
+# Scan QR code with Expo Go on Android
+\end{verbatim}
+
+\subsection{Build APK}
+\begin{verbatim}
+npm install -g eas-cli
+eas login
+eas build --platform android --profile preview
+\end{verbatim}
+
+%% ── 8. Conclusion ────────────────────────────────────────────────────────────
+\section{Conclusion}
+
+EconCalc successfully implements all 11 standard Casio fx-991ES PLUS modes as a React Native
+Android application, and extends it with an original ECON mode verified against textbook
+values. The app includes a professional UI with startup/exit screens, calculation history,
+graph output, and a fully functional APK.
+
+\vspace{1.5em}
+\begin{center}
+\begin{tcolorbox}[width=0.65\textwidth,colback=orange!8,colframe=casio,
+    center title,title=Submitted By]
+\centering
+\textbf{Abishek Khatri}\\
+\texttt{JEC080BCT001}\\
+Janakpur Engineering College\\
+ENCE 356 --- Engineering Economics\\
+2082 B.S.
+\end{tcolorbox}
+\end{center}
+
+\end{document}
