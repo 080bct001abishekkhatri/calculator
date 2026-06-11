@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 interface DisplayProps {
   expression: string;
@@ -8,59 +8,83 @@ interface DisplayProps {
 
 export default function Display({ expression, result, shiftActive }: DisplayProps) {
   return (
-    <View style={styles.container}>
-      <View style={styles.statusBar}>
-        <Text style={styles.status}>NATURAL-V.P.A.M.</Text>
-        <Text style={styles.status}>{shiftActive ? 'SHIFT' : '   '} | Deg | FIX</Text>
+    <View style={s.container}>
+      {/* Status bar */}
+      <View style={s.statusBar}>
+        <View style={s.statusLeft}>
+          <Text style={s.statusChip}>NATURAL V.P.A.M.</Text>
+          {shiftActive && <Text style={[s.statusChip, s.shiftChip]}>SHIFT</Text>}
+        </View>
+        <Text style={s.statusRight}>DEG · FIX</Text>
       </View>
+
+      {/* Expression */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.exprScroll}
+        contentContainerStyle={s.exprScroll}
       >
-        <Text style={styles.expression}>{expression || '0'}</Text>
+        <Text style={s.expression} numberOfLines={1}>
+          {expression || '0'}
+        </Text>
       </ScrollView>
-      <Text style={styles.result} numberOfLines={1}>
-        {result !== null ? `= ${result}` : ''}
-      </Text>
+
+      {/* Divider */}
+      {result !== null && <View style={s.divider} />}
+
+      {/* Result */}
+      {result !== null && (
+        <Text style={s.result} numberOfLines={1}>
+          = {result}
+        </Text>
+      )}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   container: {
-    backgroundColor: '#c8d8a0',
+    backgroundColor: '#0d1117',
     marginHorizontal: 8,
-    marginTop: 8,
-    borderRadius: 6,
-    padding: 10,
+    marginTop: 6,
+    borderRadius: 12,
+    padding: 12,
     minHeight: 110,
     justifyContent: 'space-between',
-    borderWidth: 2,
-    borderColor: '#8aaa60',
+    borderWidth: 1,
+    borderColor: '#21262d',
   },
   statusBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-  },
-  status: {
-    fontSize: 10,
-    color: '#4a6a20',
-    fontWeight: '600',
-  },
-  exprScroll: {
     alignItems: 'center',
-    paddingVertical: 4,
+    marginBottom: 6,
   },
+  statusLeft: { flexDirection: 'row', gap: 6 },
+  statusChip: {
+    fontSize: 9,
+    color: '#484f58',
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    backgroundColor: '#161b22',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  shiftChip: { color: '#ffaa22', backgroundColor: '#2a1f00' },
+  statusRight: { color: '#484f58', fontSize: 9, fontWeight: '600', letterSpacing: 0.5 },
+  exprScroll: { alignItems: 'center', paddingVertical: 4 },
   expression: {
-    fontSize: 26,
-    color: '#1a3a1a',
-    fontWeight: '400',
-    letterSpacing: 1,
+    fontSize: 28,
+    color: '#c9d1d9',
+    fontWeight: '300',
+    letterSpacing: 1.5,
   },
+  divider: { height: 1, backgroundColor: '#21262d', marginVertical: 6 },
   result: {
-    fontSize: 18,
-    color: '#3a5a1a',
+    fontSize: 22,
+    color: '#cc6600',
     textAlign: 'right',
+    fontWeight: '600',
   },
 });

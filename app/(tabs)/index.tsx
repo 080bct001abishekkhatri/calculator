@@ -6,6 +6,7 @@ import Display from '../../components/Display';
 import { saveToHistory } from '../../utils/history';
 import { computeExpression, computeStats, getLastAnswer, setAngleMode, setLastAnswer } from '../../utils/mathEngine';
 import MiniGraph from '../../components/MiniGraph';
+import { evaluate } from 'mathjs'
 
 const ALL_MODES = [
   { id: 'COMP',   num: '1',  name: 'COMP',   desc: 'General Computations (Default)' },
@@ -22,7 +23,6 @@ const ALL_MODES = [
   { id: 'ECON',   num: '★',  name: 'ECON',   desc: 'Cash Flow Analyzer — Original Feature' },
 ];
 
-// ─── ERF APPROXIMATION (Abramowitz & Stegun 7.1.26, max error 1.5e-7) ────────
 const erf = (x: number): number => {
   const t = 1 / (1 + 0.3275911 * Math.abs(x));
   const poly =
@@ -35,13 +35,11 @@ const erf = (x: number): number => {
   return x >= 0 ? result : -result;
 };
 
-// ─── NORMAL CDF  P(X ≤ x) ────────────────────────────────────────────────────
 const normalCDF = (x: number, mu: number, sigma: number): number => {
   if (sigma <= 0) return NaN;
   return 0.5 * (1 + erf((x - mu) / (sigma * Math.SQRT2)));
 };
 
-// ─── BINOMIAL CDF  P(X ≤ k) ──────────────────────────────────────────────────
 const binomialCDF = (n: number, p: number, k: number): number => {
   if (p < 0 || p > 1 || n < 1 || k < 0) return NaN;
   k = Math.floor(k);
@@ -56,7 +54,6 @@ const binomialCDF = (n: number, p: number, k: number): number => {
   return Math.min(cdf, 1);
 };
 
-// ─── POISSON CDF  P(X ≤ k) ───────────────────────────────────────────────────
 const poissonCDF = (lambda: number, k: number): number => {
   if (lambda <= 0 || k < 0) return NaN;
   k = Math.floor(k);
@@ -68,7 +65,6 @@ const poissonCDF = (lambda: number, k: number): number => {
 };
 
 export default function Calculator() {
-  // ═══ COMP STATE ═══
   const [expression, setExpression] = useState('');
   const [result, setResult] = useState<string | null>(null);
   const [shiftActive, setShift] = useState(false);
@@ -77,26 +73,22 @@ export default function Calculator() {
   const [currentMode, setCurrentMode] = useState('COMP');
   const [showModeModal, setShowModeModal] = useState(false);
 
-  // ═══ BASE-N STATE ═══
   const [baseInput, setBaseInput] = useState('');
   const [baseFrom, setBaseFrom] = useState<'DEC' | 'BIN' | 'OCT' | 'HEX'>('DEC');
 
-  // ═══ STAT STATE ═══
   const [statValues, setStatValues] = useState<number[]>([]);
   const [statInputRaw, setStatInputRaw] = useState('');
   const [statResult, setStatResult] = useState<any>(null);
 
-  // ═══ EQN STATE ═══
   const [eqnType, setEqnType] = useState<'quad' | 'cubic'>('quad');
   const [eqnA, setEqnA] = useState('');
   const [eqnB, setEqnB] = useState('');
   const [eqnC, setEqnC] = useState('');
   const [eqnD, setEqnD] = useState('');
   const [eqnResult, setEqnResult] = useState<string[]>([]);
-  const [eqnGraph,  setEqnGraph]  = useState<{points:{x:number;y:number}[]; roots:number[]} | null>(null);
-  const [tableGraph,setTableGraph]= useState<{x:number;y:number}[] | null>(null);
+  const [eqnGraph, setEqnGraph] = useState<{points:{x:number;y:number}[]; roots:number[]} | null>(null);
+  const [tableGraph, setTableGraph] = useState<{x:number;y:number}[] | null>(null);
 
-  // ═══ CMPLX STATE ═══
   const [cmplxA, setCmplxA] = useState('');
   const [cmplxB, setCmplxB] = useState('');
   const [cmplxC, setCmplxC] = useState('');
@@ -104,43 +96,36 @@ export default function Calculator() {
   const [cmplxOp, setCmplxOp] = useState<'+' | '-' | '*' | '/'>('+');
   const [cmplxRes, setCmplxRes] = useState<string | null>(null);
 
-  // ═══ MATRIX STATE ═══
   const [matA, setMatA] = useState('');
   const [matB, setMatB] = useState('');
   const [matOp, setMatOp] = useState<'+' | '-' | '*'>('*');
   const [matRes, setMatRes] = useState<string | null>(null);
 
-  // ═══ TABLE STATE ═══
   const [tableExpr, setTableExpr] = useState('');
   const [tableStart, setTableStart] = useState('');
   const [tableEnd, setTableEnd] = useState('');
   const [tableStep, setTableStep] = useState('');
   const [tableResult, setTableResult] = useState<{ x: number; y: number }[]>([]);
 
-  // ═══ VECTOR STATE ═══
   const [vecA, setVecA] = useState('');
   const [vecB, setVecB] = useState('');
   const [vecOp, setVecOp] = useState<'·' | '×'>('·');
   const [vecRes, setVecRes] = useState<string | null>(null);
 
-  // ═══ INEQ STATE ═══
   const [ineqLeft, setIneqLeft] = useState('');
   const [ineqOp, setIneqOp] = useState<'<' | '≤' | '>' | '≥'>('<');
   const [ineqRight, setIneqRight] = useState('');
   const [ineqRes, setIneqRes] = useState<string | null>(null);
 
-  // ═══ VERIF STATE ═══
   const [verifExpr, setVerifExpr] = useState('');
   const [verifRes, setVerifRes] = useState<boolean | null>(null);
 
-  // ═══ DIST STATE ═══
   const [distType, setDistType] = useState<'normal' | 'binomial' | 'poisson'>('normal');
   const [distParam1, setDistParam1] = useState('');
   const [distParam2, setDistParam2] = useState('');
   const [distValue, setDistValue] = useState('');
   const [distRes, setDistRes] = useState<string | null>(null);
 
-  // ═══ COMP HELPERS ═══
   const press = (val: string) => { setResult(null); setShift(false); setExpression(prev => prev + val); };
   const calculate = () => {
     if (!expression) return;
@@ -152,7 +137,6 @@ export default function Calculator() {
   const del = () => { setExpression(prev => prev.slice(0, -1)); setResult(null); };
   const toggleAngle = () => { const next = angleModeLabel === 'DEG' ? 'RAD' : 'DEG'; setAngleLabel(next); setAngleMode(next); };
 
-  // ═══ BASE-N HELPERS ═══
   const convertBase = (val: string, from: string) => {
     try {
       const dec = from === 'BIN' ? parseInt(val, 2) : from === 'OCT' ? parseInt(val, 8) : from === 'HEX' ? parseInt(val, 16) : parseInt(val, 10);
@@ -163,15 +147,12 @@ export default function Calculator() {
   const bConv = baseInput ? convertBase(baseInput, baseFrom) : null;
   const baseDigits = baseFrom === 'BIN' ? ['0', '1'] : baseFrom === 'OCT' ? ['0','1','2','3','4','5','6','7'] : baseFrom === 'HEX' ? ['0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F'] : ['0','1','2','3','4','5','6','7','8','9'];
 
-  // ═══ STAT HELPERS ═══
   const addStatValue = () => {
     const v = parseFloat(statInputRaw);
     if (!isNaN(v)) { setStatValues(p => [...p, v]); setStatInputRaw(''); }
   };
   const runStats = () => setStatResult(computeStats(statValues));
 
-  // ═══ EQN HELPERS ═══
-  // Bisection scan — finds ALL real roots reliably, no missed roots
   const bisectScan = (fn: (x:number)=>number, lo=-12, hi=12, steps=2000): number[] => {
     const dx = (hi - lo) / steps;
     const found: number[] = [];
@@ -186,7 +167,6 @@ export default function Calculator() {
         }
       }
     }
-    // deduplicate with tolerance
     return found.reduce((acc: number[], v) =>
       acc.some(u => Math.abs(u - v) < 1e-5) ? acc : [...acc, v], []).sort((a,b)=>a-b);
   };
@@ -209,14 +189,12 @@ export default function Calculator() {
         const re = (-b) / (2 * a);
         const im = Math.sqrt(-disc) / (2 * a);
         setEqnResult([`x₁ = ${re.toFixed(6)} + ${im.toFixed(6)}i`, `x₂ = ${re.toFixed(6)} - ${im.toFixed(6)}i`]);
-        // complex roots — still graph the parabola, no root markers
       } else {
         const x1 = (-b + Math.sqrt(disc)) / (2 * a);
         const x2 = (-b - Math.sqrt(disc)) / (2 * a);
         realRoots = [...new Set([x1, x2])].sort((p,q)=>p-q);
         setEqnResult(realRoots.map((r, i) => `x${i+1} = ${r.toFixed(8)}`));
       }
-      // Graph: center around vertex ±4 units
       const vertex = -b / (2 * a);
       const spread = Math.max(4, Math.abs(vertex) * 0.5 + 4);
       const fn = (x: number) => a*x*x + b*x + c;
@@ -228,26 +206,22 @@ export default function Calculator() {
       setEqnResult(roots.length > 0
         ? roots.map((r, i) => `x${i+1} = ${r.toFixed(8)}`)
         : ['No real roots found in [-12, 12]']);
-      // Graph range: around roots or default
       const xMin = roots.length > 0 ? Math.min(...roots) - 2.5 : -5;
       const xMax = roots.length > 0 ? Math.max(...roots) + 2.5 : 5;
       buildGraph(fn, roots, xMin, xMax);
     }
   };
 
-  // ═══ DIST HELPER ═══
   const calcDist = () => {
     const p1 = parseFloat(distParam1);
     const p2 = parseFloat(distParam2);
     const x  = parseFloat(distValue);
     if (isNaN(x)) { setDistRes('Enter a valid x value'); return; }
-
     if (distType === 'normal') {
       if (isNaN(p1) || isNaN(p2) || p2 <= 0) { setDistRes('Enter valid μ and σ (σ > 0)'); return; }
       const prob = normalCDF(x, p1, p2);
       const z    = (x - p1) / p2;
       setDistRes(`z = ${z.toFixed(4)}\nP(X ≤ ${x}) = ${prob.toFixed(6)}\nP(X > ${x}) = ${(1 - prob).toFixed(6)}`);
-
     } else if (distType === 'binomial') {
       const n = Math.round(p1);
       if (isNaN(n) || isNaN(p2) || p2 < 0 || p2 > 1 || n < 1) { setDistRes('Enter valid n (integer ≥ 1) and p (0 ≤ p ≤ 1)'); return; }
@@ -255,7 +229,6 @@ export default function Calculator() {
       const mean = n * p2;
       const std  = Math.sqrt(n * p2 * (1 - p2));
       setDistRes(`P(X ≤ ${Math.floor(x)}) = ${cdf.toFixed(6)}\nMean = ${mean.toFixed(4)}\nσ = ${std.toFixed(4)}`);
-
     } else {
       if (isNaN(p1) || p1 <= 0) { setDistRes('Enter valid λ (λ > 0)'); return; }
       const cdf = poissonCDF(p1, x);
@@ -263,9 +236,10 @@ export default function Calculator() {
     }
   };
 
-  // ═══ RENDER COMP ═══
+  // ── COMP ──────────────────────────────────────────────────────────────────
   const renderComp = () => (
-    <View style={s.buttons}>
+    // ↓ justifyContent moved here from stylesheet (fixes ScrollView error)
+    <View style={[s.buttons, { justifyContent: 'space-between' }]}>
       <View style={s.row}>
         <CalcButton label="SHIFT" type={shiftActive ? 'equals' : 'shift'} onPress={() => setShift(p => !p)} />
         <CalcButton label="ALPHA" type={alphaActive ? 'equals' : 'shift'} onPress={() => setAlpha(p => !p)} />
@@ -313,7 +287,7 @@ export default function Calculator() {
         <CalcButton label="2" type="number" onPress={() => press('2')} />
         <CalcButton label="3" type="number" onPress={() => press('3')} />
         <CalcButton label="+" type="operator" onPress={() => press('+')} />
-        <CalcButton label="nPr(" type="scientific" onPress={() => press('nPr(')} />
+        <CalcButton label={shiftActive ? 'nCr(' : 'nPr('} type="scientific" onPress={() => press(shiftActive ? 'nCr(' : 'nPr(')} />
       </View>
       <View style={s.row}>
         <CalcButton label="0" type="number" wide onPress={() => press('0')} />
@@ -325,7 +299,6 @@ export default function Calculator() {
     </View>
   );
 
-  // ═══ RENDER BASE-N ═══
   const renderBaseN = () => (
     <ScrollView style={s.buttons}>
       <View style={s.row}>
@@ -358,7 +331,6 @@ export default function Calculator() {
     </ScrollView>
   );
 
-  // ═══ RENDER STAT ═══
   const renderStat = () => (
     <ScrollView style={s.buttons}>
       <View style={s.row}>
@@ -385,7 +357,6 @@ export default function Calculator() {
     </ScrollView>
   );
 
-  // ═══ RENDER EQN ═══
   const renderEqn = () => (
     <ScrollView style={s.buttons}>
       <View style={s.row}>
@@ -427,7 +398,6 @@ export default function Calculator() {
     </ScrollView>
   );
 
-  // ═══ RENDER CMPLX ═══
   const renderCmplx = () => (
     <ScrollView style={s.buttons}>
       <View style={s.row}>
@@ -460,7 +430,6 @@ export default function Calculator() {
     </ScrollView>
   );
 
-  // ═══ RENDER MATRIX ═══
   const renderMatrix = () => (
     <ScrollView style={s.buttons}>
       <View style={s.row}>
@@ -481,7 +450,7 @@ export default function Calculator() {
           try {
             const parse = (s: string) => s.split(';').map(row => row.split(',').map(Number));
             const A = parse(matA); const B = parse(matB);
-            const rows = A.length; const cols = A[0].length;
+            const rows = A.length;
             let R: number[][];
             if (matOp === '+' || matOp === '-') {
               R = A.map((row, i) => row.map((v, j) => matOp === '+' ? v + B[i][j] : v - B[i][j]));
@@ -499,7 +468,6 @@ export default function Calculator() {
     </ScrollView>
   );
 
-  // ═══ RENDER TABLE ═══
   const renderTable = () => (
     <ScrollView style={s.buttons}>
       <View style={s.row}>
@@ -518,7 +486,7 @@ export default function Calculator() {
           const step  = parseFloat(tableStep)  || 1;
           const res: { x: number; y: number }[] = [];
           for (let x = start; x <= end + 1e-9; x += step) {
-            const y = computeExpression(tableExpr.replace(/x/g, `(${x})`));
+            const y = (() => { try { return evaluate(tableExpr, { x }); } catch { return NaN; } })();
             res.push({ x: parseFloat(x.toFixed(6)), y: parseFloat(y) });
           }
           setTableResult(res);
@@ -533,17 +501,11 @@ export default function Calculator() {
         </View>
       )}
       {tableGraph && tableGraph.length > 1 && (
-        <MiniGraph
-          points={tableGraph}
-          label={`f(x) = ${tableExpr}`}
-          W={320}
-          H={180}
-        />
+        <MiniGraph points={tableGraph} label={`f(x) = ${tableExpr}`} W={320} H={180} />
       )}
     </ScrollView>
   );
 
-  // ═══ RENDER VECTOR ═══
   const renderVector = () => (
     <ScrollView style={s.buttons}>
       <View style={s.row}>
@@ -580,7 +542,6 @@ export default function Calculator() {
     </ScrollView>
   );
 
-  // ═══ RENDER INEQ ═══
   const renderIneq = () => (
     <ScrollView style={s.buttons}>
       <View style={s.row}>
@@ -610,7 +571,6 @@ export default function Calculator() {
     </ScrollView>
   );
 
-  // ═══ RENDER VERIF ═══
   const renderVerif = () => (
     <ScrollView style={s.buttons}>
       <View style={s.row}>
@@ -638,66 +598,34 @@ export default function Calculator() {
     </ScrollView>
   );
 
-  // ═══ RENDER DIST (FIXED — no Math.erf) ═══
   const renderDist = () => (
     <ScrollView style={s.buttons}>
       <View style={s.row}>
         <CalcButton label="MODE" type="special" onPress={() => setShowModeModal(true)} />
         <CalcButton label="AC" type="clear" onPress={() => { setDistRes(null); setDistParam1(''); setDistParam2(''); setDistValue(''); }} />
       </View>
-
-      {/* Distribution type selector */}
       <View style={s.row}>
         {(['normal', 'binomial', 'poisson'] as const).map((d, i) => (
-          <CalcButton
-            key={d}
-            label={['Normal', 'Binom', 'Poisson'][i]}
-            type={distType === d ? 'equals' : 'special'}
-            onPress={() => { setDistType(d); setDistRes(null); }}
-          />
+          <CalcButton key={d} label={['Normal', 'Binom', 'Poisson'][i]} type={distType === d ? 'equals' : 'special'} onPress={() => { setDistType(d); setDistRes(null); }} />
         ))}
       </View>
-
-      {/* Parameter labels change per distribution */}
       <Text style={{ color: '#888', marginLeft: 8, marginTop: 10, fontSize: 11 }}>
-        {distType === 'normal'
-          ? 'Normal Distribution: enter μ, σ, then x'
-          : distType === 'binomial'
-          ? 'Binomial Distribution: enter n (trials), p (prob), then k'
-          : 'Poisson Distribution: enter λ (rate), then k'}
+        {distType === 'normal' ? 'Normal Distribution: enter μ, σ, then x' : distType === 'binomial' ? 'Binomial Distribution: enter n (trials), p (prob), then k' : 'Poisson Distribution: enter λ (rate), then k'}
       </Text>
-
-      <TextInput
-        style={s.textInput}
-        keyboardType="numeric"
-        value={distParam1}
-        onChangeText={setDistParam1}
+      <TextInput style={s.textInput} keyboardType="numeric" value={distParam1} onChangeText={setDistParam1}
         placeholder={distType === 'normal' ? 'μ  (mean)' : distType === 'binomial' ? 'n  (number of trials)' : 'λ  (average rate)'}
-        placeholderTextColor="#555"
-      />
+        placeholderTextColor="#555" />
       {distType !== 'poisson' && (
-        <TextInput
-          style={s.textInput}
-          keyboardType="numeric"
-          value={distParam2}
-          onChangeText={setDistParam2}
+        <TextInput style={s.textInput} keyboardType="numeric" value={distParam2} onChangeText={setDistParam2}
           placeholder={distType === 'normal' ? 'σ  (std deviation, σ > 0)' : 'p  (probability, 0 ≤ p ≤ 1)'}
-          placeholderTextColor="#555"
-        />
+          placeholderTextColor="#555" />
       )}
-      <TextInput
-        style={s.textInput}
-        keyboardType="numeric"
-        value={distValue}
-        onChangeText={setDistValue}
+      <TextInput style={s.textInput} keyboardType="numeric" value={distValue} onChangeText={setDistValue}
         placeholder={distType === 'normal' ? 'x  (value)' : 'k  (integer value)'}
-        placeholderTextColor="#555"
-      />
-
+        placeholderTextColor="#555" />
       <View style={{ margin: 8 }}>
         <CalcButton label="P(X) =" type="equals" onPress={calcDist} />
       </View>
-
       {distRes && (
         <View style={s.resultBox}>
           {distRes.split('\n').map((line, i) => (
@@ -708,7 +636,6 @@ export default function Calculator() {
     </ScrollView>
   );
 
-  // ═══ MAIN RENDER ═══
   return (
     <View style={s.container}>
       <StatusBar barStyle="light-content" backgroundColor="#0a0a0a" />
@@ -750,15 +677,11 @@ export default function Calculator() {
             <Text style={s.modalTitle}>SELECT MODE</Text>
             <ScrollView>
               {ALL_MODES.map(m => (
-                <Pressable
-                  key={m.id}
-                  style={s.modeRow}
-                  onPress={() => {
-                    setShowModeModal(false);
-                    if (m.id === 'ECON') { router.push('/(tabs)/cashflow'); }
-                    else { setCurrentMode(m.id); }
-                  }}
-                >
+                <Pressable key={m.id} style={s.modeRow} onPress={() => {
+                  setShowModeModal(false);
+                  if (m.id === 'ECON') { router.push('/(tabs)/cashflow'); }
+                  else { setCurrentMode(m.id); }
+                }}>
                   <Text style={s.modeNum}>{m.num}</Text>
                   <View>
                     <Text style={s.modeName}>{m.name}</Text>
@@ -782,7 +705,8 @@ const s = StyleSheet.create({
   header:       { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 12, paddingBottom: 4 },
   headerText:   { color: '#cc6600', fontSize: 12, fontWeight: '700', letterSpacing: 1.5 },
   modeTag:      { color: '#666', fontSize: 12 },
-  buttons:      { flex: 1, padding: 6, justifyContent: 'space-between' },
+  // ↓ justifyContent removed from here
+  buttons:      { flex: 1, padding: 6 },
   row:          { flexDirection: 'row', flex: 1 },
   displayBox:   { backgroundColor: '#111', margin: 8, borderRadius: 6, padding: 12 },
   baseInputText:{ color: '#88ff88', fontSize: 22 },
